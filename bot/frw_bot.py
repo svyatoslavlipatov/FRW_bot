@@ -17,6 +17,133 @@ current_section = None
 last_displayed_products = {}
 # Словарь для хранения корзин для каждого пользователя
 carts = {}
+admin_id = 5100769116
+# Глобальная переменная для отслеживания завершения рассылки
+mailing_completed = False
+
+
+# Глобальная переменная для хранения пути к последнему сохраненному изображению
+last_saved_photo_path = ""
+
+# Обработчик для кнопки "Рассылка фото"
+@bot.message_handler(func=lambda message: message.text == admin_btns['mailing_photo'])
+def handle_mailing_photo_button(message):
+    bot.send_message(message.chat.id, "Отправьте фотографию для рассылки:")
+    bot.register_next_step_handler(message, handle_mailing_photo)
+
+# Обработчик для получения фотографии от администратора
+def handle_mailing_photo(message):
+    # Проверяем, является ли сообщение фотографией
+    if message.photo:
+        # Получаем ID фотографии и скачиваем её
+        photo_id = message.photo[-1].file_id
+        file_info = bot.get_file(photo_id)
+        file_path = file_info.file_path
+        downloaded_file = bot.download_file(file_path)
+
+        # Путь для сохранения фотографии
+        global last_saved_photo_path
+        last_saved_photo_path = "./mailpics/photo_" + str(photo_id) + ".jpg"
+
+        # Сохраняем фотографию
+        with open(last_saved_photo_path, 'wb') as new_file:
+            new_file.write(downloaded_file)
+
+        bot.send_message(message.chat.id, "Фотография успешно сохранена. Теперь отправьте текст для рассылки.")
+        bot.register_next_step_handler(message, handle_mailing_text)
+    else:
+        bot.send_message(message.chat.id, "Нужно отправить фотографию. Попробуйте снова")
+
+# Обработчик для получения текста для рассылки
+def handle_mailing_text(message):
+    message_text = message.text
+    send_mailing(message_text)
+
+# Функция для отправки рассылки
+def send_mailing(message_text):
+    global last_saved_photo_path
+
+    # Отправляем изображение
+    with open(last_saved_photo_path, 'rb') as photo_file:
+        send_message_to_all_users(message_text, photo_file)
+
+    # Очищаем путь к последнему сохраненному изображению
+    last_saved_photo_path = ""
+
+# Функция для отправки сообщения всем пользователям и обновления статуса активности
+def send_message_to_all_users(message_text, photo_file=None):
+    global mailing_completed
+    connection = sqlite3.connect('./db/users.db')
+    cursor = connection.cursor()
+    cursor.execute('''SELECT user_id FROM account''')
+    users = cursor.fetchall()
+
+    for user in users:
+        user_id = user[0]
+        try:
+            if photo_file is not None:
+                bot.send_photo(user_id, photo_file, caption=message_text)
+                print(f"Отправка сообщения '{message_text}' пользователю с айди {user_id}")
+            else:
+                bot.send_message(user_id, message_text)
+                print(f"Отправка сообщения '{message_text}' пользователю с айди {user_id}")
+
+            # Обновляем статус активности пользователя в базе данных
+            # Предполагаем, что сообщение было успешно отправлено
+            cursor.execute('''UPDATE account SET active = 1 WHERE user_id = ?''', (user_id,))
+            connection.commit()
+        except telebot.apihelper.ApiException as e:
+            if e.error_code == 403:  # Если ошибка 403 (Forbidden), то пользователь заблокировал бота
+                print(f"Пользователь с айди {user_id} заблокировал бота")
+                cursor.execute('''UPDATE account SET active = 0 WHERE user_id = ?''', (user_id,))
+                connection.commit()
+            else:
+                print(f"Ошибка при отправке сообщения пользователю с айди {user_id}: {e}")
+
+    connection.close()
+    bot.send_message(admin_id, "Рассылка завершена!")
+    mailing_completed = True  # Устанавливаем флаг завершения рассылки
+
+# Обработчик для кнопки "Рассылка"
+@bot.message_handler(func=lambda message: message.text == admin_btns['mailing'])
+def handle_mailing_button(message):
+    # Создаем клавиатуру
+    buttons = [
+        [admin_btns['canceling']],
+        [back_btns['back_home']]
+    ]
+    markup = create_markup(buttons)
+    # Отправляем сообщение с клавиатурой
+    
+    bot.send_message(message.chat.id, "Введите сообщение рассылки:", reply_markup=markup)
+
+    bot.register_next_step_handler(message, handle_mailing_message)
+
+
+# Обработчик для получения сообщения рассылки от администратора
+def handle_mailing_message(message):
+    message_text = message.text
+    send_message_to_all_users(message_text)
+
+
+# Функция для обработки команды /admin
+@bot.message_handler(commands=['admin'])
+def handle_admin_command(message):
+    # Проверяем, является ли пользователь с ID 5100769116 администратором
+    if message.from_user.id == admin_id:
+        # Создаем клавиатуру
+        buttons = [
+            [admin_btns['mailing_photo']],
+            [admin_btns['mailing']],
+            [back_btns['back_home']]
+        ]
+        markup = create_markup(buttons)
+        # Отправляем сообщение с клавиатурой
+        bot.send_message(message.chat.id, "Выберите действие:", reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id, "У вас нет доступа к этой команде.")
+
+
 
 #Загрузка всех товаров из базы данных
 def load_all_products():
@@ -81,7 +208,8 @@ def create_account_table(user_id, telegram_username):
                         user_id INTEGER PRIMARY KEY,
                         telegram_username TEXT,
                         start_time TEXT,
-                        last_activity_time TEXT
+                        last_activity_time TEXT,
+                        active BOOLEAN
                     )''')
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     # Проверяем, существует ли запись с данным user_id
@@ -89,12 +217,14 @@ def create_account_table(user_id, telegram_username):
     existing_user = cursor.fetchone()
     if not existing_user:  # Если пользователь еще не существует, то добавляем
         cursor.execute(
-            '''INSERT INTO account (user_id, telegram_username, start_time, last_activity_time) VALUES (?, ?, ?, ?)''',
-            (user_id, telegram_username, current_time, current_time))
-    else:  # Если пользователь уже существует, обновляем время последнего захода
-        cursor.execute('''UPDATE account SET last_activity_time = ? WHERE user_id = ?''', (current_time, user_id))
+            '''INSERT INTO account (user_id, telegram_username, start_time, last_activity_time, active) VALUES (?, ?, ?, ?, ?)''',
+            (user_id, telegram_username, current_time, current_time, True))
+    else:  # Если пользователь уже существует, обновляем время последнего захода и устанавливаем active в True
+        cursor.execute('''UPDATE account SET last_activity_time = ?, active = ? WHERE user_id = ?''', (current_time, True, user_id))
     connection.commit()
     connection.close()
+
+
 
 # Ответы пользователю, если введено что-то непонятное для бота
 answers = ['Я не понял, что ты хочешь сказать.',
@@ -138,6 +268,11 @@ goods_btns = {
     'gears': 'Шестерни',
     'hopup_nodes':'Узлы хоп-ап'
 }
+admin_btns = {
+    'mailing': 'Рассылка',
+    'mailing_photo': 'Рассылка с фото',
+    'canceling': 'Отмена рассылки'
+}
 # ------- Закрытие кнопки -------
 
 # Функция для генерации случайного ответа
@@ -174,8 +309,8 @@ def add_buttons_to_markup(button_dict, max_buttons_per_row):
     return buttons
 
 # Обработка фото и стикеров
-@bot.message_handler(content_types=['photo', 'sticker', 'audio'])
-def get_photo(message):
+@bot.message_handler(content_types=['sticker', 'audio'])
+def get_what_msg(message):
     bot.send_message(message.chat.id, 'Извини, я не могу обрабатывать фото, стикеры и голосовые :(')
 
 
@@ -203,6 +338,7 @@ def welcome(message):
         bot.send_message(message.chat.id, 'Вернули тебя в главное меню!', reply_markup=markup)
 
 
+
 #Добавление товара в корзину
 @bot.message_handler(func=lambda message: message.text == buy_btns.get('add_to_cart'))
 def inquire_about_product(message):
@@ -224,7 +360,7 @@ def inquire_about_product(message):
 
 
 #Показ корзины + удаление товаров из неё
-@bot.message_handler(func=lambda message: message.text == '🛒 Корзина' or message.text.lower() == 'все')
+@bot.message_handler(func=lambda message: message.text == '🛒 Корзина' or message.text.lower() == 'очистить')
 def show_cart(message):
     buttons = [
         [buy_btns['buy']],
@@ -233,7 +369,7 @@ def show_cart(message):
     markup = create_markup(buttons)
     user_id = message.chat.id
     if user_id in carts:
-        if message.text.lower() == 'все':  # Проверяем, если отправлено слово "все"
+        if message.text.lower() == 'очистить':  # Проверяем, если отправлено слово "все"
             carts[user_id] = []  # Очищаем корзину для данного пользователя
             bot.send_message(message.chat.id, "Корзина очищена.", reply_markup=markup)
             return
@@ -255,7 +391,7 @@ def show_cart(message):
             if requires_confirmation:
                 total_price_str += " (требует уточнения)"
             response += f"\nОбщая сумма: {total_price_str}"  # Добавляем общую сумму в текст ответа
-            response += "\n\nЧтобы удалить товар из корзины, отправьте его номер.\nЕсли хотите очистить корзину полностью, напишите 'все'."
+            response += "\n\nЧтобы удалить товар из корзины, отправьте его номер.\nЕсли хотите очистить корзину полностью, напишите 'очистить'."
             bot.send_message(message.chat.id, response, reply_markup=markup)
         else:
             bot.send_message(message.chat.id, "Ваша корзина пуста.",  reply_markup=markup)
