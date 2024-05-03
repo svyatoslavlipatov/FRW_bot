@@ -1,6 +1,5 @@
 import random
 import telebot
-import webbrowser
 import sqlite3
 from telebot import types
 from datetime import datetime
@@ -11,6 +10,8 @@ file = open('./token.txt')
 mytoken = file.read()
 # Передача токена
 bot = telebot.TeleBot(mytoken)
+
+
 # Переменная действующей секции
 current_section = None
 # Переменная для хранения информации о последнем показанном товаре
@@ -18,9 +19,6 @@ last_displayed_products = {}
 # Словарь для хранения корзин для каждого пользователя
 carts = {}
 admin_id = 5100769116
-# Глобальная переменная для отслеживания завершения рассылки
-mailing_completed = False
-
 
 # Глобальная переменная для хранения пути к последнему сохраненному изображению
 last_saved_photo_path = ""
@@ -72,7 +70,6 @@ def send_mailing(message_text):
 
 # Функция для отправки сообщения всем пользователям и обновления статуса активности
 def send_message_to_all_users(message_text, photo_file=None):
-    global mailing_completed
     connection = sqlite3.connect('./db/users.db')
     cursor = connection.cursor()
     cursor.execute('''SELECT user_id FROM account''')
@@ -101,22 +98,19 @@ def send_message_to_all_users(message_text, photo_file=None):
                 print(f"Ошибка при отправке сообщения пользователю с айди {user_id}: {e}")
 
     connection.close()
-    bot.send_message(admin_id, "Рассылка завершена!")
-    mailing_completed = True  # Устанавливаем флаг завершения рассылки
+    # Создаем клавиатуру
+    buttons = [
+        [admin_btns['mailing_photo']],
+        [admin_btns['mailing']],
+        [back_btns['back_home']]
+    ]
+    markup = create_markup(buttons)
+    bot.send_message(admin_id, "Рассылка завершена!", reply_markup=markup)
 
 # Обработчик для кнопки "Рассылка"
 @bot.message_handler(func=lambda message: message.text == admin_btns['mailing'])
 def handle_mailing_button(message):
-    # Создаем клавиатуру
-    buttons = [
-        [admin_btns['canceling']],
-        [back_btns['back_home']]
-    ]
-    markup = create_markup(buttons)
-    # Отправляем сообщение с клавиатурой
-    
-    bot.send_message(message.chat.id, "Введите сообщение рассылки:", reply_markup=markup)
-
+    bot.send_message(message.chat.id, "Введите сообщение рассылки:")
     bot.register_next_step_handler(message, handle_mailing_message)
 
 
@@ -511,9 +505,6 @@ def info(message):
 
     elif message.text == goods_btns.get('gears'):
         gears_category(message)
-
-    elif message.text == buy_btns.get('buy'):
-        webbrowser.open('')
 
     elif message.text == back_btns.get('back'):
         if current_section:
