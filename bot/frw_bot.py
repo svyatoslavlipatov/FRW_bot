@@ -336,44 +336,40 @@ def inquire_about_product(message):
         bot.send_message(message.chat.id, "Не удалось добавить товар в корзину. Попробуйте заново.")
 
 
-#Показ корзины + удаление товаров из неё
-@bot.message_handler(func=lambda message: message.text == '🛒 Корзина' or message.text.lower() == 'очистить')
+# Показ корзины + удаление товаров из неё
+@bot.message_handler(func=lambda message: message.text.lower() in ['🛒 корзина', 'очистить'])
 def show_cart(message):
+    user_id = message.chat.id
+    if user_id not in carts:
+        carts[user_id] = []
+
+    if message.text.lower() == 'очистить':
+        carts[user_id] = []
+        bot.send_message(message.chat.id, "Корзина очищена.")
+        return
+
+    cart_items = carts[user_id]
+    if not cart_items:
+        bot.send_message(message.chat.id, "Ваша корзина пуста.")
+        return
+
+    total_price = sum(int(''.join(filter(str.isdigit, item["цена"]))) for item in cart_items if any(char.isdigit() for char in item["цена"]))
+    total_price_str = f"{total_price}₽{' (требует уточнения)' if any(not char.isdigit() for item in cart_items for char in item['цена']) else ''}"
+
+    response = "Ваша корзина:\n"
+    for i, item in enumerate(cart_items, start=1):
+        response += f'{i}. Название: {item["название"]}, Цена: {item["цена"]}\n'
+
+    response += f"\nОбщая сумма: {total_price_str}\n\nЧтобы удалить товар из корзины, отправьте его номер.\nЕсли хотите очистить корзину полностью, напишите 'очистить'."
     buttons = [
         [buy_btns['buy']],
         [back_btns['back_home']]
     ]
     markup = create_markup(buttons)
-    user_id = message.chat.id
-    if user_id in carts:
-        if message.text.lower() == 'очистить':  # Проверяем, если отправлено слово "все"
-            carts[user_id] = []  # Очищаем корзину для данного пользователя
-            bot.send_message(message.chat.id, "Корзина очищена.", reply_markup=markup)
-            return
-        cart_items = carts[user_id]
-        if cart_items:
-            total_price = 0  # Переменная для хранения общей суммы
-            requires_confirmation = False  # Флаг, указывающий на то, что есть товары с неполной ценой
-            response = "Ваша корзина:\n"
-            for i, item in enumerate(cart_items, start=1):
-                # Проверяем, есть ли цифры в строке цены
-                if any(char.isdigit() for char in item["цена"]):
-                    price = int(''.join(filter(str.isdigit, item["цена"])))  # Извлекаем только цифры из цены
-                else:
-                    price = 0  # Если цифр вообще нет, считаем цену равной нулю
-                    requires_confirmation = True
-                total_price += price  # Добавляем цену товара к общей сумме
-                response += f'{i}. Название: {item["название"]}, Цена: {item["цена"]}\n'
-            total_price_str = str(total_price) + "₽"
-            if requires_confirmation:
-                total_price_str += " (требует уточнения)"
-            response += f"\nОбщая сумма: {total_price_str}"  # Добавляем общую сумму в текст ответа
-            response += "\n\nЧтобы удалить товар из корзины, отправьте его номер.\nЕсли хотите очистить корзину полностью, напишите 'очистить'."
-            bot.send_message(message.chat.id, response, reply_markup=markup)
-        else:
-            bot.send_message(message.chat.id, "Ваша корзина пуста.",  reply_markup=markup)
-    else:
-        bot.send_message(message.chat.id, "Ваша корзина пуста.",  reply_markup=markup)
+    bot.send_message(message.chat.id, response, reply_markup=markup)
+
+
+
 
 @bot.message_handler(func=lambda message: message.text in [name_product[1] for name_product in products_list])
 def handle_product_message(message):
