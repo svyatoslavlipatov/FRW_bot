@@ -342,25 +342,22 @@ def show_cart(message):
     user_id = message.chat.id
     if user_id not in carts:
         carts[user_id] = []
-
     if message.text.lower() == 'очистить':
         carts[user_id] = []
         bot.send_message(message.chat.id, "Корзина очищена.")
         return
-
     cart_items = carts[user_id]
     if not cart_items:
         bot.send_message(message.chat.id, "Ваша корзина пуста.")
         return
-
     total_price = sum(int(''.join(filter(str.isdigit, item["цена"]))) for item in cart_items if any(char.isdigit() for char in item["цена"]))
     total_price_str = f"{total_price}₽{' (требует уточнения)' if any(not char.isdigit() for item in cart_items for char in item['цена']) else ''}"
-
     response = "Ваша корзина:\n"
     for i, item in enumerate(cart_items, start=1):
         response += f'{i}. Название: {item["название"]}, Цена: {item["цена"]}\n'
 
-    response += f"\nОбщая сумма: {total_price_str}\n\nЧтобы удалить товар из корзины, отправьте его номер.\nЕсли хотите очистить корзину полностью, напишите 'очистить'."
+    response += f"\nОбщая сумма: {total_price_str}\n\nЧтобы удалить товар из корзины, отправьте его номер.\n
+    Если хотите очистить корзину полностью, напишите 'очистить'."
     buttons = [
         [buy_btns['buy']],
         [back_btns['back_home']]
