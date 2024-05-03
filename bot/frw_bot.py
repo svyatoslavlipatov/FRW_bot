@@ -447,40 +447,28 @@ def buy_product(message):
 def info(message):
     if message.text == start_btns.get('catalog'):
         goodsChapter(message)
-
     elif message.text == start_btns.get('about'):
         aboutUs(message)
-
     elif message.text == start_btns.get('faqs'):
         faqAnswer(message)
-
     elif message.text == about_btns.get('number'):
         bot.send_message(message.chat.id,'<b>Номер телефона:</b> 7 (924) 834-88-86', parse_mode='html')
-
     elif message.text == about_btns.get('address'):
         bot.send_message(message.chat.id,'<b>Адрес:</b> Иркутск, Декабрьских событий, 102', parse_mode='html')
-
     elif message.text == goods_btns.get('drives'):
         drives_category(message)
-
     elif message.text == goods_btns.get('sights'):
         sights_category(message)
-
     elif message.text == goods_btns.get('gas'):
         gas_category(message)
-
     elif message.text == goods_btns.get('girboxes'):
         girboxes_category(message)
-
     elif message.text == goods_btns.get('launchers'):
         launchers_category(message)
-
     elif message.text == goods_btns.get('hopup_nodes'):
         hopup_nodes_category(message)
-
     elif message.text == goods_btns.get('gears'):
         gears_category(message)
-
     elif message.text == back_btns.get('back'):
         if current_section:
             # Если пользователь находится в каком-то разделе каталога, возвращаем его к списку товаров этого раздела
@@ -500,17 +488,13 @@ def info(message):
                 gears_category(message)
         else:
             goodsChapter(message)
-
     elif message.text in faq_btns:
         text = f'{faq_btns[message.text]}'
         bot.send_message(message.chat.id, text, parse_mode='html')
-
     elif message.text == back_btns.get('back_catalog'):
         goodsChapter(message)
-
     elif message.text == back_btns.get('back_home'):
         welcome(message)
-
     else:
         random_answer(message)
 
