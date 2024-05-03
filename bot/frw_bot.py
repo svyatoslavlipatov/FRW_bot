@@ -4,13 +4,11 @@ import sqlite3
 from telebot import types
 from datetime import datetime
 
-
 # Считывание токена телеграм бота
 file = open('./token.txt')
 mytoken = file.read()
 # Передача токена
 bot = telebot.TeleBot(mytoken)
-
 
 # Переменная действующей секции
 current_section = None
@@ -18,39 +16,33 @@ current_section = None
 last_displayed_products = {}
 # Словарь для хранения корзин для каждого пользователя
 carts = {}
+# ID админа, который сможет использовать команду /admin
 admin_id = 5100769116
-
 # Глобальная переменная для хранения пути к последнему сохраненному изображению
 last_saved_photo_path = ""
 
-# Обработчик для кнопки "Рассылка фото"
-@bot.message_handler(func=lambda message: message.text == admin_btns['mailing_photo'])
-def handle_mailing_photo_button(message):
-    bot.send_message(message.chat.id, "Отправьте фотографию для рассылки:")
-    bot.register_next_step_handler(message, handle_mailing_photo)
+
+# ----------------------- Функции для административной ------------------------------
 
 # Обработчик для получения фотографии от администратора
 def handle_mailing_photo(message):
-    # Проверяем, является ли сообщение фотографией
     if message.photo:
-        # Получаем ID фотографии и скачиваем её
-        photo_id = message.photo[-1].file_id
-        file_info = bot.get_file(photo_id)
-        file_path = file_info.file_path
-        downloaded_file = bot.download_file(file_path)
-
-        # Путь для сохранения фотографии
+        photo = message.photo[-1]
+        file_info = bot.get_file(photo.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
         global last_saved_photo_path
-        last_saved_photo_path = "./mailpics/photo_" + str(photo_id) + ".jpg"
-
-        # Сохраняем фотографию
+        last_saved_photo_path = f"./mailpics/photo_{photo.file_id}.jpg"
         with open(last_saved_photo_path, 'wb') as new_file:
             new_file.write(downloaded_file)
-
         bot.send_message(message.chat.id, "Фотография успешно сохранена. Теперь отправьте текст для рассылки.")
         bot.register_next_step_handler(message, handle_mailing_text)
     else:
         bot.send_message(message.chat.id, "Нужно отправить фотографию. Попробуйте снова")
+
+# Обработчик для получения сообщения рассылки от администратора
+def handle_mailing_message(message):
+    message_text = message.text
+    send_message_to_all_users(message_text)
 
 # Обработчик для получения текста для рассылки
 def handle_mailing_text(message):
@@ -60,11 +52,9 @@ def handle_mailing_text(message):
 # Функция для отправки рассылки
 def send_mailing(message_text):
     global last_saved_photo_path
-
     # Отправляем изображение
     with open(last_saved_photo_path, 'rb') as photo_file:
         send_message_to_all_users(message_text, photo_file)
-
     # Очищаем путь к последнему сохраненному изображению
     last_saved_photo_path = ""
 
@@ -74,7 +64,6 @@ def send_message_to_all_users(message_text, photo_file=None):
     cursor = connection.cursor()
     cursor.execute('''SELECT user_id FROM account''')
     users = cursor.fetchall()
-
     for user in users:
         user_id = user[0]
         try:
@@ -84,9 +73,6 @@ def send_message_to_all_users(message_text, photo_file=None):
             else:
                 bot.send_message(user_id, message_text)
                 print(f"Отправка сообщения '{message_text}' пользователю с айди {user_id}")
-
-            # Обновляем статус активности пользователя в базе данных
-            # Предполагаем, что сообщение было успешно отправлено
             cursor.execute('''UPDATE account SET active = 1 WHERE user_id = ?''', (user_id,))
             connection.commit()
         except telebot.apihelper.ApiException as e:
@@ -96,9 +82,7 @@ def send_message_to_all_users(message_text, photo_file=None):
                 connection.commit()
             else:
                 print(f"Ошибка при отправке сообщения пользователю с айди {user_id}: {e}")
-
     connection.close()
-    # Создаем клавиатуру
     buttons = [
         [admin_btns['mailing_photo']],
         [admin_btns['mailing']],
@@ -107,17 +91,20 @@ def send_message_to_all_users(message_text, photo_file=None):
     markup = create_markup(buttons)
     bot.send_message(admin_id, "Рассылка завершена!", reply_markup=markup)
 
+
+
+
+# Кнопка "Рассылка фото"
+@bot.message_handler(func=lambda message: message.text == admin_btns['mailing_photo'])
+def handle_mailing_photo_button(message):
+    bot.send_message(message.chat.id, "Отправьте фотографию для рассылки:")
+    bot.register_next_step_handler(message, handle_mailing_photo)
+
 # Обработчик для кнопки "Рассылка"
 @bot.message_handler(func=lambda message: message.text == admin_btns['mailing'])
 def handle_mailing_button(message):
     bot.send_message(message.chat.id, "Введите сообщение рассылки:")
     bot.register_next_step_handler(message, handle_mailing_message)
-
-
-# Обработчик для получения сообщения рассылки от администратора
-def handle_mailing_message(message):
-    message_text = message.text
-    send_message_to_all_users(message_text)
 
 
 # Функция для обработки команды /admin
@@ -136,7 +123,6 @@ def handle_admin_command(message):
         bot.send_message(message.chat.id, "Выберите действие:", reply_markup=markup)
     else:
         bot.send_message(message.chat.id, "У вас нет доступа к этой команде.")
-
 
 
 #Загрузка всех товаров из базы данных
@@ -217,8 +203,6 @@ def create_account_table(user_id, telegram_username):
         cursor.execute('''UPDATE account SET last_activity_time = ?, active = ? WHERE user_id = ?''', (current_time, True, user_id))
     connection.commit()
     connection.close()
-
-
 
 # Ответы пользователю, если введено что-то непонятное для бота
 answers = ['Я не понял, что ты хочешь сказать.',
@@ -332,7 +316,6 @@ def welcome(message):
         bot.send_message(message.chat.id, 'Вернули тебя в главное меню!', reply_markup=markup)
 
 
-
 #Добавление товара в корзину
 @bot.message_handler(func=lambda message: message.text == buy_btns.get('add_to_cart'))
 def inquire_about_product(message):
@@ -417,7 +400,6 @@ def handle_product_message(message):
             markup = create_markup(buttons)
             bot.send_message(message.chat.id, "Выберите действие:", reply_markup=markup)
             return
-
 
 #Купить
 @bot.message_handler(func=lambda message: message.text == buy_btns['buy'])
