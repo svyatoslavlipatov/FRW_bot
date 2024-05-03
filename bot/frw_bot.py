@@ -356,8 +356,7 @@ def show_cart(message):
     for i, item in enumerate(cart_items, start=1):
         response += f'{i}. Название: {item["название"]}, Цена: {item["цена"]}\n'
 
-    response += f"\nОбщая сумма: {total_price_str}\n\nЧтобы удалить товар из корзины, отправьте его номер.\n
-    Если хотите очистить корзину полностью, напишите 'очистить'."
+    response += f"\nОбщая сумма: {total_price_str}\n\nЧтобы удалить товар из корзины, отправьте его номер.\nЕсли хотите очистить корзину полностью, напишите 'очистить'."
     buttons = [
         [buy_btns['buy']],
         [back_btns['back_home']]
